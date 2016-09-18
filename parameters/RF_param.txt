@@ -1,0 +1,12 @@
+is_average 0
+is_use_depth 0
+max_frame_num 200
+sampler_num_per_frame 5000
+tree_num 10
+max_depth 20
+min_leaf_node 1
+max_pixel_offset 131
+pixel_offset_candidate_num 20
+split_candidate_num 10
+weight_candidate_num 0
+verbose 0

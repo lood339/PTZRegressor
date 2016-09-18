@@ -1,0 +1,2 @@
+sequence_name basketball_dataset/seq1.txt
+image_sequence_base_dir basketball_dataset/
