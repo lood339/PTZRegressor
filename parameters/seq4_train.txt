@@ -1,0 +1,2 @@
+sequence_name basketball_dataset/leave_4_out.txt
+image_sequence_base_dir basketball_dataset/
