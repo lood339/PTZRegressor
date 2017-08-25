@@ -9,15 +9,10 @@
 #ifndef __Relocalization__PTZTreeUtil__
 #define __Relocalization__PTZTreeUtil__
 
-//#include <vnl/vnl_vector_fixed.h>
+
 #include <vector>
-//#include <vnl/vnl_vector.h>
 #include <unordered_map>
-//#include <vgl/vgl_box_2d.h>
-//#include <vil/vil_image_view.h>
 #include <Eigen/Dense>
-//#include <opencv2/core/core.hpp>
-//#include <opencv2/core/core_c.h>
 #include <Eigen/Geometry>
 #include <unsupported/Eigen/CXX11/Tensor>
 
@@ -68,7 +63,6 @@ struct PTZTreeParameter
     int max_pixel_offset_;            // in pixel
     int pixel_offset_candidate_num_;  // large number less randomness
     int split_candidate_num_;  // number of split in [v_min, v_max]
-    int weight_candidate_num_;
     bool verbose_;
     
     PTZTreeParameter()
@@ -88,7 +82,6 @@ struct PTZTreeParameter
         max_pixel_offset_ = 131;
         pixel_offset_candidate_num_ = 20;
         split_candidate_num_ = 20;
-        weight_candidate_num_ = 0;
         verbose_ = true;
     }
     
@@ -96,7 +89,7 @@ struct PTZTreeParameter
     {
         assert(pf);
         
-        const int param_num = 12;
+        const int param_num = 11;
         unordered_map<std::string, int> imap;
         for(int i = 0; i<param_num; i++)
         {
@@ -108,7 +101,7 @@ struct PTZTreeParameter
             }
             imap[string(s)] = val;
         }
-        assert(imap.size() == 12);
+        assert(imap.size() == 11);
         
         is_average_ = (imap[string("is_average")] == 1);
         is_use_depth_ = (imap[string("is_use_depth")] == 1);
@@ -123,7 +116,7 @@ struct PTZTreeParameter
         pixel_offset_candidate_num_ = imap[string("pixel_offset_candidate_num")];
         split_candidate_num_ = imap[string("split_candidate_num")];
         
-        weight_candidate_num_ = imap[string("weight_candidate_num")];
+        
         verbose_ = imap[string("verbose")];
         
         return true;
@@ -157,7 +150,6 @@ struct PTZTreeParameter
         fprintf(pf, "max_pixel_offset %d\n", max_pixel_offset_);
         fprintf(pf, "pixel_offset_candidate_num %d\n", pixel_offset_candidate_num_);
         fprintf(pf, "split_candidate_num %d\n", split_candidate_num_);
-        fprintf(pf, "weight_candidate_num %d\n", weight_candidate_num_);
         fprintf(pf, "verbose %d\n", (int)verbose_);
         return true;
     }
@@ -170,8 +162,7 @@ struct PTZTreeParameter
         printf("max_pixel_offset: %d\t pixel_offset_candidate_num: %d\t split_candidate_num %d\n",
                max_pixel_offset_,
                pixel_offset_candidate_num_,
-               split_candidate_num_);
-        printf("weight_candidate_num_: %d\n\n", weight_candidate_num_);
+               split_candidate_num_);        
     }
 };
 

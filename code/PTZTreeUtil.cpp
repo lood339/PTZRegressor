@@ -8,10 +8,8 @@
 
 #include "PTZTreeUtil.h"
 #include <assert.h>
-//#include "vpgl_plus.h"
-//#include <vgl/vgl_point_2d.h>
 #include <stdlib.h>
-//#include <vnl/vnl_math.h>
+
 
 vector<PTZLearningSample> PTZTreeUtil::generateLearningSamples(const Eigen::Vector3d &ptz,
                                                                const int img_width,

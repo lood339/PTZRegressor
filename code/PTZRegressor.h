@@ -11,6 +11,7 @@
 
 #include "PTZ_tree.h"
 #include <vector>
+#include <unsupported/Eigen/CXX11/Tensor>
 
 using std::vector;
 
@@ -25,11 +26,11 @@ public:
     ~PTZRegressor();
     
     // average value from all decision trees
-    bool predictAverage(const vil_image_view<vxl_byte> & rgb_image,
+    bool predictAverage(const Eigen::Tensor<unsigned char, 3> & rgb_image,
                         PTZTestingResult & predict) const;
     
     // result from one tree whose leaf node has the most similar color as sampler
-    bool predictByColor(const vil_image_view<vxl_byte> & rgb_image,
+    bool predictByColor(const Eigen::Tensor<unsigned char, 3> & rgb_image,
                         PTZTestingResult & predict) const;
     
     bool save(const char *fileName) const;

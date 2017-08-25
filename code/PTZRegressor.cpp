@@ -7,6 +7,9 @@
 //
 
 #include "PTZRegressor.h"
+#include <Eigen/Dense>
+
+using Eigen::Vector3d;
 
 PTZRegressor::PTZRegressor()
 {
@@ -17,14 +20,14 @@ PTZRegressor::~PTZRegressor()
     
 }
 
-bool PTZRegressor::predictAverage(const vil_image_view<vxl_byte> & rgb_image,
+bool PTZRegressor::predictAverage(const Eigen::Tensor<unsigned char, 3> & rgb_image,
                                   PTZTestingResult & predict) const
 {
     assert(trees_.size() > 0);
     
     PTZTestingResult init_pred = predict;
-    vnl_vector_fixed<double, 3> predicted_ptz(0, 0, 0);
-    vnl_vector_fixed<double, 3> predicted_color(0, 0, 0);
+    Eigen::Vector3d predicted_ptz(0, 0, 0);
+    Eigen::Vector3d predicted_color(0, 0, 0);
     int num_valid_pred = 0;
     for (int i = 0; i<trees_.size(); i++) {
         PTZTestingResult tr = init_pred;
@@ -44,23 +47,23 @@ bool PTZRegressor::predictAverage(const vil_image_view<vxl_byte> & rgb_image,
 }
 
 
-bool PTZRegressor::predictByColor(const vil_image_view<vxl_byte> & rgb_image,
+bool PTZRegressor::predictByColor(const Eigen::Tensor<unsigned char, 3> & rgb_image,
                                   PTZTestingResult & predict) const
 {
     assert(trees_.size() > 0);
     
-    double min_color_dis2 = INT_MAX;
+    double min_color_dis = INT_MAX;
     bool is_valid = false;
     PTZTestingResult init_pred = predict;
     for (int i = 0; i<trees_.size(); i++) {
         PTZTestingResult tr = init_pred;
         bool isPredict = trees_[i]->predict(rgb_image, tr);
         if (isPredict) {
-            vnl_vector_fixed<double, 3> dif = tr.sampled_color_ - tr.predict_color_;
-            double dis2 = dot_product(dif, dif);
+            Eigen::Vector3d dif = tr.sampled_color_ - tr.predict_color_;
+            double dis = dif.norm();
             // select the one with minimum color distance
-            if (dis2 < min_color_dis2) {
-                min_color_dis2 = dis2;
+            if (dis < min_color_dis) {
+                min_color_dis = dis;
                 predict = tr;
                 is_valid = true;
             }

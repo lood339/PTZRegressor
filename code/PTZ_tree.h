@@ -75,38 +75,35 @@ private:
                        int depth,
                        PTZTreeNode *node);
     
-    bool predict(PTZTreeNode *node,                 
+    void setLeafNode(const vector<PTZLearningSample> & samples,
+                     const vector<Eigen::Tensor<unsigned char, 3 > >  & rgb_images,
+                     const vector<unsigned int> & indices,
+                     PTZTreeNode *node);
+    
+    bool predict(PTZTreeNode *node,
                  const Eigen::Tensor<unsigned char, 3 > & rgb_image,
                  PTZTestingResult & predict) const;
     
     double bestSplitCandidate(const vector<PTZLearningSample> & samples,
                               const vector<Eigen::Tensor<unsigned char, 3 > > & rgb_images,
                               const vector<unsigned int> & indices,
-                              const PTZSplitParameter & split_param,
-                              const int split_num,
-                              const int min_leaf_node,
+                              PTZSplitParameter & split_param,
                               vector<unsigned int> & left_indices,
-                              vector<unsigned int> & right_indices,
-                              double & split_value);
-
-
+                              vector<unsigned int> & right_indices);
     
     
 };
 
 struct PTZSplitParameter
 {
-    Eigen::Vector2i offset2_;        // displacement in image, [x, y]
+    Eigen::Vector2i offset_;        // displacement in image, [x, y]
     Eigen::Vector2i channle_;        // rgb image channel
-    Eigen::Vector2d wt_;
     double threshold_;  // threshold of splitting. store result
     
     PTZSplitParameter()
     {
-        offset2_.setConstant(0.0);
+        offset_.setConstant(0.0);
         channle_.setConstant(0.0);
-        wt_[0] = 1.0;
-        wt_[1] = -1.0;
         threshold_ = 0.0;
     }
 };

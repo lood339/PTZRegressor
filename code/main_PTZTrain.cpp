@@ -12,8 +12,9 @@
 #include "PTZRegressor.h"
 #include "PTZRegressorBuilder.h"
 #include "PTZTreeUtil.h"
+#include <Eigen/Dense>
 
-#if 0
+#if 1
 
 
 static void help()
@@ -66,6 +67,12 @@ int main(int argc, const char * argv[])
     const char * sequence_param  = argv[1];
     const char * tree_param_file = argv[2];
     const char * save_model_file = argv[3];
+     
+    /*
+    const char * sequence_param  = "/Users/jimmy/Desktop/bmvc16_ptz_calib/seq1_test.txt";
+    const char * tree_param_file = "/Users/jimmy/Desktop/bmvc16_ptz_calib/RF_param_1.txt";
+    const char * save_model_file = "debug_model.txt";
+     */
     
     string sequence_file_name;
     string image_sequence_base_dir;
@@ -86,7 +93,7 @@ int main(int argc, const char * argv[])
     
     // read images and labels (ground truth)
     vector<string> image_files;
-    vector<vnl_vector_fixed<double, 3> > ptzs;
+    vector<Eigen::Vector3d > ptzs;
     PTZTreeUtil::read_sequence_data(sequence_file_name.c_str(), image_sequence_base_dir.c_str(), image_files, ptzs);
     assert(image_files.size() == ptzs.size());
     printf("training frame number is %lu\n", image_files.size());
