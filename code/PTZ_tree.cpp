@@ -77,7 +77,7 @@ double PTZTree::bestSplitCandidate(const vector<PTZLearningSample> & samples,
     
     vector<double> split_candidate = rnd_generator_.getRandomNumbers(val_min, val_max, split_num);
     
-    const Eigen::Vector3d ptz_wt(1.0, 1.0, 0.001);
+    const Eigen::Vector3d ptz_wt(1.0, 1.0, 0.00001);
     
     for (int i = 0; i<split_candidate.size(); i++) {
         double cur_split = split_candidate[i];

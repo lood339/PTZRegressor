@@ -8,6 +8,7 @@
 
 #include "PTZRegressor.h"
 #include <Eigen/Dense>
+#include "cvx_util.hpp"
 
 using Eigen::Vector3d;
 
@@ -70,6 +71,38 @@ bool PTZRegressor::predictByColor(const Eigen::Tensor<unsigned char, 3> & rgb_im
         }
     }
     return is_valid;
+}
+
+bool PTZRegressor::predictAll(const Eigen::Tensor<unsigned char, 3> & rgb_image,
+                              PTZTestingResult & sample,
+                              vector<Eigen::Vector3d> & predictions,
+                              vector<double> & dists)
+{
+    assert(trees_.size() > 0);
+    
+    PTZTestingResult init_pred = sample;
+    vector<Eigen::Vector3d> unordered_predictions;
+    vector<double> unordered_dists;
+    for (int i = 0; i<trees_.size(); i++) {
+        PTZTestingResult tr = init_pred;
+        bool isPredict = trees_[i]->predict(rgb_image, tr);
+        if (isPredict) {
+            unordered_predictions.push_back(tr.predict_ptz_);
+            unordered_dists.push_back((init_pred.sampled_color_ - tr.predict_color_).norm());
+        }
+    }
+    assert(unordered_predictions.size() == unordered_dists.size());
+    
+    // sort by distance
+    vector<size_t> sortIndexes = CvxUtil::sortIndices<double>(unordered_dists);
+    for (int i = 0; i<sortIndexes.size(); i++) {
+        predictions.push_back(unordered_predictions[sortIndexes[i]]);
+        dists.push_back(unordered_dists[sortIndexes[i]]);
+    }
+    
+    assert(predictions.size() == dists.size());
+    
+    return predictions.size() > 0;
 }
 
 bool PTZRegressor::save(const char *fileName) const

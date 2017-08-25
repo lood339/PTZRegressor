@@ -6,29 +6,35 @@
 //  Copyright (c) 2016 Nowhere Planet. All rights reserved.
 //
 
-#if 0
+#if 1
 #include <iostream>
 #include <string>
 #include <vector>
 #include "PTZRegressor.h"
 #include "PTZRegressorBuilder.h"
 #include "PTZTreeUtil.h"
-#include <vil/vil_load.h>
 #include <iostream>
-#include <vgl/vgl_point_2d.h>
-//#include "vpgl_plus.h"
+#include <opencv2/core/core.hpp>
+#include <opencv2/core/core_c.h>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/highgui/highgui_c.h>
+#include "cvx_tensor.h"
+#include "dt_util.hpp"
+#include "ptz_pose_estimation.h"
+#include "mat_io.hpp"
 
 using std::cout;
 using std::endl;
+using Eigen::Vector2d;
+using Eigen::Vector3d;
 
 
 
 static void help()
 {
-    printf("program  RFModelFile sequenceParam numSample average saveFilePrefix \n");
-    printf("PTZ_test rf.txt      seq_param.txt 5000      0       ptz_predict_   \n");
+    printf("program  RFModelFile sequenceParam reprojThreshold distanceThreshold numSample saveFile \n");
+    printf("PTZ_test rf.txt      seq_param.txt 2               25               5000      result.mat   \n");
     printf("parameter fits to US high school basketball dataset\n");
-    printf("average: 0 --> best color, 1 --> average from all trees\n");
 }
 
 static void read_testing_sequence_files(const char *file_name,
@@ -64,16 +70,26 @@ static void read_testing_sequence_files(const char *file_name,
 
 int main(int argc, const char * argv[])
 {
-    if (argc != 6) {
-        printf("argc is %d, should be 6\n", argc);
+    if (argc != 7) {
+        printf("argc is %d, should be 7 \n", argc);
         help();
         return -1;
     }
     const char * model_file = argv[1];
     const char * sequence_param = argv[2];
-    int num_sample = strtod(argv[3], NULL);
-    bool is_average = (strtod(argv[4], NULL) == 1);
-    const char * save_file_prefix = argv[5];
+    const double reprojection_error_threshold = strtod(argv[3], NULL);
+    const double distance_threshold = strtod(argv[4], NULL);
+    const int sample_number = (int)strtod(argv[5], NULL);
+    const char * save_file = argv[6];
+    
+    /*
+    const char * model_file = "/Users/jimmy/Desktop/bmvc16_ptz_calib/model/seq1.txt";
+    const char * sequence_param = "/Users/jimmy/Desktop/bmvc16_ptz_calib/seq1_test.txt";
+    const double reprojection_error_threshold = 2;
+    const double distance_threshold = 25;
+    const int sample_number = 5000;
+    const char * save_file = "result.mat";
+     */
     
     string sequence_file_name;
     string image_sequence_base_dir;
@@ -90,87 +106,102 @@ int main(int argc, const char * argv[])
     
     // read testing images and ground truth ptz
     vector<string> image_files;
-    vector<vnl_vector_fixed<double, 3> > ptzs;
+    vector<Eigen::Vector3d > ptzs;
     PTZTreeUtil::read_sequence_data(sequence_file_name.c_str(), image_sequence_base_dir.c_str(), image_files, ptzs);
+    Eigen::AlignedBox<double, 2> invalid_region = PTZTreeUtil::highschool_RS_invalid_region();
     
     
-    vgl_box_2d<double> invalid_region = PTZTreeUtil::highschool_RS_invalid_region();
-    cout<<"invalid region is "<<invalid_region<<endl;
+    
+    Eigen::Vector2d pp(1280.0/2.0, 720.0/2.0);
+    ptz_pose_opt::PTZPreemptiveRANSACParameter param;
+    param.reprojection_error_threshold_ = reprojection_error_threshold;
+    param.sample_number_ = 64;
+    
+    Eigen::MatrixXd gt_ptz_all(image_files.size(), 3);
+    Eigen::MatrixXd estimated_ptz_all(image_files.size(), 3);
+    
     
     for (int i = 0; i<image_files.size(); i++) {
-        
         // sample from the image
-        vil_image_view<vxl_byte> cur_img = vil_load(image_files[i].c_str());
-        vnl_vector_fixed<double, 3> cur_ptz = ptzs[i];
-        assert(cur_img.nplanes()  == 3);
+        cv::Mat cur_img = cv::imread(image_files[i].c_str());
+        assert(!cur_img.empty());
+        assert(cur_img.cols == 1280 && cur_img.rows == 720);
         
+        Eigen::Tensor<unsigned char, 3> cur_img_eigen;
+        cvx::cv2eigen(cur_img, cur_img_eigen);
         
+        Eigen::Vector3d gt_ptz = ptzs[i];
+        
+        double tt = clock();
         vector<PTZLearningSample> cur_samples;
-        cur_samples = PTZTreeUtil::generateLearningSamples(cur_img, cur_ptz, i, num_sample, invalid_region);
+        cur_samples = PTZTreeUtil::generateLearningSamples(cur_img_eigen, gt_ptz, i, sample_number, invalid_region);
         //printf("sampler number is %lu\n", cur_samples.size());
         
         // predict each pixel PTZ
-        double tt = clock();
-        vgl_point_2d<double> pp(cur_img.ni()/2.0, cur_img.nj()/2.0);
-        vector<PTZTestingResult> predictions;
-        vector<vnl_vector_fixed<double, 3> > prediction_errors;
+        
+        vector<Eigen::Vector2d> image_points;
+        vector<vector<Eigen::Vector2d> > candidate_pan_tilt;
         for (int j = 0; j<cur_samples.size(); j++) {
             PTZTestingResult tr;
             tr.img2d_ = cur_samples[j].img2d_;
             tr.sampled_color_ = cur_samples[j].color_;
-            bool is_predict = false;
-            if (is_average) {
-                is_predict = model.predictAverage(cur_img, tr);
-            }
-            else
-            {
-                is_predict = model.predictByColor(cur_img, tr);
-            }
             
-            tr.gt_ptz_ = cur_samples[j].ptz_;
-            if (is_predict) {
-                vnl_vector_fixed<double, 3> estimated_ptz;
-                vgl_point_2d<double> ref_pt(tr.img2d_[0], tr.img2d_[1]);
-                PTZTreeUtil::panTiltFromReferencePointDecodeFocalLength(ref_pt, tr.predict_ptz_, pp, estimated_ptz);
-                vnl_vector_fixed<double, 3> err = cur_ptz - estimated_ptz;
-                
-                predictions.push_back(tr);
-                prediction_errors.push_back(err);
+            vector<Eigen::Vector3d> ptz_predictions;
+            vector<double> dists;
+            vector<Eigen::Vector2d> pt_predictions;
+            model.predictAll(cur_img_eigen, tr, ptz_predictions, dists);
+            assert(ptz_predictions.size() > 0);
+            
+            for(int k = 0; k<ptz_predictions.size(); k++) {
+                if (dists[k] < distance_threshold) {
+                    pt_predictions.push_back(Vector2d(ptz_predictions[k].x(), ptz_predictions[k].y()));
+                }
+            }
+            if (pt_predictions.size() > 0) {
+                image_points.push_back(Vector2d(cur_samples[j].img2d_.x(), cur_samples[j].img2d_.y()));
+                candidate_pan_tilt.push_back(pt_predictions);
             }
         }
-        printf("RF prediction cost time %lf\n", (clock() - tt)/CLOCKS_PER_SEC);
+        assert(image_points.size() == candidate_pan_tilt.size());
+        printf("valid sample number is %lu\n", image_points.size());
         
-        
-        
-        // median error
-        vnl_vector_fixed<double, 3> median_error;
-        PTZTreeUtil::median_error(prediction_errors, median_error);
-        cout<<"prediction median error is "<<median_error<<endl;
-        
-        // write to file
-        {
-            char save_file[1024] = {NULL};
-            sprintf(save_file, "%s_%06d.txt", save_file_prefix, i);
-            FILE *pf = fopen(save_file, "w");
-            assert(pf);
-            fprintf(pf, "%s\n", image_files[i].c_str());
-            fprintf(pf, "imageLocation\t  prediction3d groundTruth3d \t predicted_color actual_color\n");
-            fprintf(pf, "%lf %lf %lf\n", cur_ptz[0], cur_ptz[1], cur_ptz[2]);
-            for (int j = 0; j<predictions.size(); j++) {
-                vnl_vector_fixed<int, 2> p1 = predictions[j].img2d_;
-                vnl_vector_fixed<double, 3> p2 = predictions[j].predict_ptz_;
-                vnl_vector_fixed<double, 3> p3 = predictions[j].gt_ptz_;
-                vnl_vector_fixed<double, 3> color_1 = predictions[j].predict_color_;
-                vnl_vector_fixed<double, 3> color_2 = predictions[j].sampled_color_;
-                
-                fprintf(pf, "%6d %6d\t %lf %lf %lf\t %lf %lf %lf\t", p1[0], p1[1], p2[0], p2[1], p2[2], p3[0], p3[1], p3[2]);
-                fprintf(pf, "%4.1f %4.1f %4.1f\t %4.1f %4.1f %4.1f\n", color_1[0], color_1[1], color_1[2], color_2[0], color_2[1], color_2[2]);
-            }
-            fclose(pf);
-            printf("save to %s\n", save_file);
+        Eigen::Vector3d estimated_ptz(0, 0, 0);
+        bool is_opt = ptz_pose_opt::preemptiveRANSACOneToMany(image_points,
+                                                              candidate_pan_tilt,
+                                                              pp,
+                                                              param, estimated_ptz, false);
+        //printf("Prediction and camera pose estimation cost time: %f seconds.\n", (clock() - tt)/CLOCKS_PER_SEC);
+        if (is_opt) {
+            cout<<"ptz estimation error: "<<(gt_ptz - estimated_ptz).transpose()<<endl;
         }
+        else {
+            printf("Optimize PTZ failed\n");
+        }
+        gt_ptz_all.row(i) = gt_ptz;
+        estimated_ptz_all.row(i) = estimated_ptz;
     }
-    printf("test from %lu frames\n", image_files.size());
+    std::vector<std::string> var_name;
+    std::vector<Eigen::MatrixXd> data;
+    var_name.push_back("ground_truth_ptz");
+    var_name.push_back("estimated_ptz");
+    data.push_back(gt_ptz_all);
+    data.push_back(estimated_ptz_all);
+    matio::writeMultipleMatrix(save_file, var_name, data);
+    
+    // simple statistics
+    // void meanMedianError(const vector<T> & errors, T & mean, T & median);
+    vector<Eigen::VectorXd> errors;
+    for (int r = 0; r<gt_ptz_all.rows(); r++) {
+        Eigen::VectorXd err = estimated_ptz_all.row(r) - gt_ptz_all.row(r);
+        errors.push_back(err);
+    }
+    
+    Eigen::VectorXd mean_error, median_error;
+    DTUtil::meanMedianError(errors, mean_error, median_error);
+    cout<<"PTZ mean   error: "<<mean_error.transpose()<<endl;
+    cout<<"PTZ median error: "<<median_error.transpose()<<endl;
+     
+ 
     return 0;
 }
 

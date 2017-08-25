@@ -14,8 +14,7 @@
 #include "PTZTreeUtil.h"
 #include <Eigen/Dense>
 
-#if 1
-
+#if 0
 
 static void help()
 {

@@ -33,6 +33,12 @@ public:
     bool predictByColor(const Eigen::Tensor<unsigned char, 3> & rgb_image,
                         PTZTestingResult & predict) const;
     
+    // predict pan, tilt and zoom from all trees
+    bool predictAll(const Eigen::Tensor<unsigned char, 3> & rgb_image,
+                    PTZTestingResult & sample,
+                    vector<Eigen::Vector3d> & predictions,
+                    vector<double> & dists);
+    
     bool save(const char *fileName) const;
     bool load(const char *fileName);
     
