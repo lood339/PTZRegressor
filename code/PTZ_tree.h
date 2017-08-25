@@ -9,20 +9,25 @@
 #ifndef __Relocalization__PTZ_tree__
 #define __Relocalization__PTZ_tree__
 
-#include <vnl/vnl_vector_fixed.h>
-#include <vnl/vnl_vector.h>
-#include <vil/vil_image_view.h>
+
+#include <Eigen/Dense>
 #include <vector>
+#include <unsupported/Eigen/CXX11/Tensor>
 #include "PTZTreeUtil.h"
+#include "dt_random.hpp"
 
 using std::vector;
+using Eigen::Vector3d;
+using Eigen::Vector2d;
 
 class PTZTreeNode;
+struct PTZSplitParameter;
 
 class PTZTree
 {
     friend class PTZRegressor;
     PTZTreeNode *root_;
+    DTRandom rnd_generator_;
     PTZTreeParameter param_;
     
 public:
@@ -55,24 +60,34 @@ public:
     // rgbImages: same size, rgb, 8bit image
     bool buildTree(const vector<PTZLearningSample> & samples,
                    const vector<unsigned int> & indices,
-                   const vector<vil_image_view<unsigned char> > & rgb_images,
+                   const vector<Eigen::Tensor<unsigned char, 3 > > & rgb_images,  // h x w x 3
                    const PTZTreeParameter & param);
     
-    bool predict(const vil_image_view<unsigned char> & rgb_image,
+    bool predict(const Eigen::Tensor<unsigned char, 3 > & rgb_image,
                  PTZTestingResult & predict) const;
     
 
     
 private:
     bool configureNode(const vector<PTZLearningSample> & samples,
-                       const vector<vil_image_view<unsigned char> > & rgb_images,
+                       const vector<Eigen::Tensor<unsigned char, 3 > >  & rgb_images,
                        const vector<unsigned int> & indices,
                        int depth,
                        PTZTreeNode *node);
     
     bool predict(PTZTreeNode *node,                 
-                 const vil_image_view<unsigned char> & rgb_image,
+                 const Eigen::Tensor<unsigned char, 3 > & rgb_image,
                  PTZTestingResult & predict) const;
+    
+    double bestSplitCandidate(const vector<PTZLearningSample> & samples,
+                              const vector<Eigen::Tensor<unsigned char, 3 > > & rgb_images,
+                              const vector<unsigned int> & indices,
+                              const PTZSplitParameter & split_param,
+                              const int split_num,
+                              const int min_leaf_node,
+                              vector<unsigned int> & left_indices,
+                              vector<unsigned int> & right_indices,
+                              double & split_value);
 
 
     
@@ -81,15 +96,15 @@ private:
 
 struct PTZSplitParameter
 {
-    vnl_vector_fixed<int, 2> offset2_;        // displacement in image, [x, y]
-    vnl_vector_fixed<int, 2> channle_;        // rgb image channel
-    vnl_vector_fixed<double, 2> wt_;
+    Eigen::Vector2i offset2_;        // displacement in image, [x, y]
+    Eigen::Vector2i channle_;        // rgb image channel
+    Eigen::Vector2d wt_;
     double threshold_;  // threshold of splitting. store result
     
     PTZSplitParameter()
     {
-        offset2_ = vnl_vector_fixed<int, 2>(0, 0);
-        channle_ = vnl_vector_fixed<int, 2>(0, 0);
+        offset2_.setConstant(0.0);
+        channle_.setConstant(0.0);
         wt_[0] = 1.0;
         wt_[1] = -1.0;
         threshold_ = 0.0;
@@ -106,13 +121,13 @@ public:
     
     PTZSplitParameter split_param_;
     // for leaf node
-    vnl_vector_fixed<double, 3> ptz_;
-    vnl_vector_fixed<double, 3> stddev_;  // standard deviation of the samples
+    Vector3d ptz_;
+    Vector3d stddev_;  // standard deviation of the samples
     int sample_num_;
     double sample_percentage_;
     
-    vnl_vector_fixed<double, 3> color_mu_;
-    vnl_vector_fixed<double, 3> color_sigma_;
+    Vector3d color_mu_;
+    Vector3d color_sigma_;
     
     PTZTreeNode(int depth)
     {
@@ -122,10 +137,10 @@ public:
         is_leaf_ = false;
         sample_num_ = 0;
         sample_percentage_ = 0.0;
-        ptz_    = vnl_vector_fixed<double, 3>(0, 0, 0);
-        stddev_ = vnl_vector_fixed<double, 3>(0, 0, 0);
-        color_mu_ = vnl_vector_fixed<double, 3>(0, 0, 0);
-        color_sigma_ = vnl_vector_fixed<double, 3>(0, 0, 0);
+        ptz_.setConstant(0.0);
+        stddev_.setConstant(0.0);
+        color_mu_.setConstant(0.0);
+        color_sigma_.setConstant(0.0);
     }
     
     static bool writeTree(const char *fileName, PTZTreeNode * root);

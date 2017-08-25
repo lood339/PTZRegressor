@@ -9,11 +9,11 @@
 #include "PTZTreeUtil.h"
 #include <assert.h>
 //#include "vpgl_plus.h"
-#include <vgl/vgl_point_2d.h>
+//#include <vgl/vgl_point_2d.h>
 #include <stdlib.h>
-#include <vnl/vnl_math.h>
+//#include <vnl/vnl_math.h>
 
-vector<PTZLearningSample> PTZTreeUtil::generateLearningSamples(const vnl_vector_fixed<double, 3> &ptz,
+vector<PTZLearningSample> PTZTreeUtil::generateLearningSamples(const Eigen::Vector3d &ptz,
                                                                const int img_width,
                                                                const int img_height,
                                                                const int img_index,
@@ -21,18 +21,18 @@ vector<PTZLearningSample> PTZTreeUtil::generateLearningSamples(const vnl_vector_
 {
     vector<PTZLearningSample> samples;
     
-    vgl_point_2d<double> pp(img_width/2.0, img_height/2.0);
+    Eigen::Vector2d pp(img_width/2.0, img_height/2.0);
     for (int i = 0; i<sample_num; i++) {
         PTZLearningSample sp;
         
         int x = rand()%img_width;
         int y = rand()%img_height;
-        vgl_point_2d<double> p(x, y);
+        Eigen::Vector2d p(x, y);
         
       
         PTZTreeUtil::panYtiltXFromPrinciplePointEncodeFocalLength(pp, ptz, p, sp.ptz_);
         
-        sp.img2d_ = vnl_vector_fixed<int, 2>(x, y);
+        sp.img2d_ = Eigen::Vector2i(x, y);
         sp.image_index_ = img_index;
         
         samples.push_back(sp);
@@ -42,38 +42,38 @@ vector<PTZLearningSample> PTZTreeUtil::generateLearningSamples(const vnl_vector_
 }
 
 vector<PTZLearningSample>
-PTZTreeUtil::generateLearningSamples(const vil_image_view<vxl_byte> & image,
-                                     const vnl_vector_fixed<double, 3> &ptz,
+PTZTreeUtil::generateLearningSamples(const Eigen::Tensor<unsigned char, 3> & image,
+                                     const Eigen::Vector3d &ptz,
                                      const int img_index,
                                      const int sample_num,
-                                     const vgl_box_2d<double> & exclusive_region)
+                                     const Eigen::AlignedBox<double, 2> & exclusive_region)
 {
-    assert(image.nplanes() == 3);
-    const int img_width = image.ni();
-    const int img_height = image.nj();
+    assert(image.dimension(2) == 3);
+    const long img_height = image.dimension(0);
+    const long img_width = image.dimension(1);
     
     vector<PTZLearningSample> samples;
-    vgl_point_2d<double> pp(img_width/2.0, img_height/2.0);
+    Eigen::Vector2d pp(img_width/2.0, img_height/2.0);
     for (int i = 0; i<sample_num; i++) {
         PTZLearningSample sp;
         
         int x = rand()%img_width;
         int y = rand()%img_height;
         
-        vgl_point_2d<double> p(x, y);
+        Eigen::Vector2d p(x, y);
         if (exclusive_region.contains(p)) {
             // exclude this position
             continue;
         }
-        double r = image(x, y, 0);
-        double g = image(x, y, 1);
-        double b = image(x, y, 2);
+        double r = image(y, x, 0);
+        double g = image(y, x, 1);
+        double b = image(y, x, 2);
         
         PTZTreeUtil::panYtiltXFromPrinciplePointEncodeFocalLength(pp, ptz, p, sp.ptz_);
         
-        sp.img2d_ = vnl_vector_fixed<int, 2>(x, y);
+        sp.img2d_ = Eigen::Vector2i(x, y);
         sp.image_index_ = img_index;
-        sp.color_ = vnl_vector_fixed<double, 3>(r, g, b);
+        sp.color_ = Eigen::Vector3d(r, g, b);
         samples.push_back(sp);
     }
     return samples;
@@ -83,8 +83,8 @@ PTZTreeUtil::generateLearningSamples(const vil_image_view<vxl_byte> & image,
 
 void PTZTreeUtil::mean_std(const vector<PTZLearningSample> & samples,
                            const vector<unsigned int> & indices,
-                           vnl_vector_fixed<double, 3> & mean,
-                           vnl_vector_fixed<double, 3> & stddev)
+                           Eigen::Vector3d & mean,
+                           Eigen::Vector3d & stddev)
 {
     assert(samples.size() > 0);
     
@@ -100,7 +100,7 @@ void PTZTreeUtil::mean_std(const vector<PTZLearningSample> & samples,
     stddev.fill(0.0);
     for (int i = 0; i<indices.size(); i++) {
         int index = indices[i];
-        vnl_vector_fixed<double, 3> dif = samples[index].ptz_ - mean;
+        Eigen::Vector3d dif = samples[index].ptz_ - mean;
         for (int j = 0; j<dif.size(); j++) {
             stddev[j] += dif[j] * dif[j];
         }
@@ -111,6 +111,7 @@ void PTZTreeUtil::mean_std(const vector<PTZLearningSample> & samples,
     }
 }
 
+/*
 void PTZTreeUtil::mean_std(const vector<vnl_vector_fixed<double, 3> > & data,
                            vnl_vector_fixed<double, 3> & mean,
                            vnl_vector_fixed<double, 3> & stddev)
@@ -135,15 +136,15 @@ void PTZTreeUtil::mean_std(const vector<vnl_vector_fixed<double, 3> > & data,
         stddev[i] = sqrt(stddev[i]/data.size());
     }
 }
-
+*/
 
 double PTZTreeUtil::variance(const vector<PTZLearningSample> & samples,
                              const vector<unsigned int> & indices,
-                             const vnl_vector_fixed<double, 3> & wt)
+                             const Eigen::Vector3d & wt)
 {
     assert(samples.size() > 0);
     
-    vnl_vector_fixed<double, 3> avg(0, 0, 0);
+    Eigen::Vector3d avg(0, 0, 0);
     for (int i = 0; i<indices.size(); i++) {
         int index = indices[i];
         avg += samples[index].ptz_;
@@ -151,10 +152,10 @@ double PTZTreeUtil::variance(const vector<PTZLearningSample> & samples,
     
     avg /= indices.size();
     
-    vnl_vector_fixed<double, 3> variance(0, 0, 0);
+    Eigen::Vector3d variance(0, 0, 0);
     for (int i = 0; i<indices.size(); i++) {
         int index = indices[i];
-        vnl_vector_fixed<double, 3> dif = samples[index].ptz_ - avg;
+        Eigen::Vector3d dif = samples[index].ptz_ - avg;
         for (int j = 0; j<dif.size(); j++) {
             variance[j] += dif[j] * dif[j];
         }
@@ -166,7 +167,7 @@ double PTZTreeUtil::variance(const vector<PTZLearningSample> & samples,
     }
     return ret;
 }
-
+/*
 void PTZTreeUtil::median_error(const vector< vnl_vector_fixed<double, 3> > & error,
                                vnl_vector_fixed<double, 3> & median)
 {
@@ -184,11 +185,12 @@ void PTZTreeUtil::median_error(const vector< vnl_vector_fixed<double, 3> > & err
         median[i] = m;
     }
 }
+*/
 
 void PTZTreeUtil::read_sequence_data(const char * sequence_file_name,
                                  const char * image_sequence_base_directory,
                                  vector<string> & image_files,
-                                 vector<vnl_vector_fixed<double, 3> > & ptzs)
+                                 vector<Eigen::Vector3d > & ptzs)
 {    
     assert(sequence_file_name);
     assert(image_sequence_base_directory);
@@ -206,8 +208,8 @@ void PTZTreeUtil::read_sequence_data(const char * sequence_file_name,
     }
     while (1) {
         char buf[1024] = {NULL};
-        vnl_vector_fixed<double, 3> ptz;
-        int ret = fscanf(pf, "%s %lf %lf %lf", buf, &ptz[0], &ptz[1], &ptz[2]);
+        Eigen::Vector3d ptz;
+        int ret = fscanf(pf, "%s %lf %lf %lf", buf, &ptz[0], &ptz[1], &ptz[2]);// @ not sure, if it works
         if (ret != 4) {
             break;
         }
@@ -221,12 +223,12 @@ void PTZTreeUtil::read_sequence_data(const char * sequence_file_name,
 
 bool PTZTreeUtil::load_prediction_result_with_color(const char *file_name,
                                        string & rgb_img_file,
-                                       vnl_vector_fixed<double, 3> & ptz,
-                                       vector<vnl_vector_fixed<int, 2> > & img_pts,
-                                       vector<vnl_vector_fixed<double, 3> > & pred_ptz,
-                                       vector<vnl_vector_fixed<double, 3> > & gt_ptz,
-                                       vector<vnl_vector_fixed<double, 3> > & color_pred,
-                                       vector<vnl_vector_fixed<double, 3> > & color_sample)
+                                       Eigen::Vector3d & ptz,
+                                       vector<Eigen::Vector2i > & img_pts,
+                                       vector<Vector3d > & pred_ptz,
+                                       vector<Vector3d > & gt_ptz,
+                                       vector<Vector3d > & color_pred,
+                                       vector<Vector3d > & color_sample)
 {
     assert(file_name);
     FILE *pf = fopen(file_name, "r");
@@ -265,9 +267,9 @@ bool PTZTreeUtil::load_prediction_result_with_color(const char *file_name,
         }
         
         // 2D , 3D position
-        img_pts.push_back(vnl_vector_fixed<int, 2>(val[0], val[1]));
-        pred_ptz.push_back(vnl_vector_fixed<double, 3>(val[2], val[3], val[4]));
-        gt_ptz.push_back(vnl_vector_fixed<double, 3>(val[5], val[6], val[7]));
+        img_pts.push_back(Eigen::Vector2i(val[0], val[1]));
+        pred_ptz.push_back(Eigen::Vector3d(val[2], val[3], val[4]));
+        gt_ptz.push_back(Eigen::Vector3d(val[5], val[6], val[7]));
         
         double val2[6] = {0.0};
         ret = fscanf(pf, "%lf %lf %lf %lf %lf %lf",
@@ -276,8 +278,8 @@ bool PTZTreeUtil::load_prediction_result_with_color(const char *file_name,
         if (ret != 6) {
             break;
         }
-        color_pred.push_back(vnl_vector_fixed<double, 3>(val2[0], val2[1], val2[2]));
-        color_sample.push_back(vnl_vector_fixed<double, 3>(val2[3], val2[4], val2[5]));
+        color_pred.push_back(Eigen::Vector3d(val2[0], val2[1], val2[2]));
+        color_sample.push_back(Eigen::Vector3d(val2[3], val2[4], val2[5]));
         assert(img_pts.size() == color_pred.size());
     }
     fclose(pf);
@@ -285,10 +287,10 @@ bool PTZTreeUtil::load_prediction_result_with_color(const char *file_name,
     return true;
 }
 
-void PTZTreeUtil::panTiltFromReferencePointDecodeFocalLength(const vgl_point_2d<double> & reference_point,
-                                                          const vnl_vector_fixed<double, 3> & reference_ptz,
-                                                          const vgl_point_2d<double> & principle_point,
-                                                          vnl_vector_fixed<double, 3> & ptz)
+void PTZTreeUtil::panTiltFromReferencePointDecodeFocalLength(const Eigen::Vector2d & reference_point,
+                                                          const Eigen::Vector3d & reference_ptz,
+                                                          const Eigen::Vector2d & principle_point,
+                                                          Eigen::Vector3d & ptz)
 {
     double dx = reference_point.x() - principle_point.x();
     double dy = reference_point.y() - principle_point.y();
@@ -296,8 +298,8 @@ void PTZTreeUtil::panTiltFromReferencePointDecodeFocalLength(const vgl_point_2d<
     double ref_tilt = reference_ptz[1];
     double fl = reference_ptz[2];
     
-    double delta_pan  = atan2(dx, fl) * 180.0/vnl_math::pi;
-    double delta_tilt = atan2(dy, fl) * 180.0/vnl_math::pi;
+    double delta_pan  = atan2(dx, fl) * 180.0/M_PI;
+    double delta_tilt = atan2(dy, fl) * 180.0/M_PI;
     
     ptz[0] = ref_pan  - delta_pan;
     ptz[1] = ref_tilt + delta_tilt;
@@ -309,10 +311,10 @@ void PTZTreeUtil::panTiltFromReferencePointDecodeFocalLength(const vgl_point_2d<
     }
 }
 
-void PTZTreeUtil::panYtiltXFromPrinciplePointEncodeFocalLength(const vgl_point_2d<double> & pp,
-                                                            const vnl_vector_fixed<double, 3> & pp_ptz,
-                                                            const vgl_point_2d<double> & p2,
-                                                            vnl_vector_fixed<double, 3> & p2_ptz)
+void PTZTreeUtil::panYtiltXFromPrinciplePointEncodeFocalLength(const Eigen::Vector2d & pp,
+                                                            const Eigen::Vector3d & pp_ptz,
+                                                               const Eigen::Vector2d & p2,
+                                                            Vector3d & p2_ptz)
 {
     double dx = p2.x() - pp.x();
     double dy = p2.y() - pp.y();
@@ -320,8 +322,8 @@ void PTZTreeUtil::panYtiltXFromPrinciplePointEncodeFocalLength(const vgl_point_2
     double pan_pp  = pp_ptz[0];
     double tilt_pp = pp_ptz[1];
     double focal_length = pp_ptz[2];
-    double delta_pan  = atan2(dx, focal_length) * 180/vnl_math::pi;
-    double delta_tilt = atan2(dy, focal_length) * 180/vnl_math::pi;
+    double delta_pan  = atan2(dx, focal_length) * 180/M_PI;
+    double delta_tilt = atan2(dy, focal_length) * 180/M_PI;
     
     double pan2  = pan_pp + delta_pan;
     double tilt2 = tilt_pp - delta_tilt;  // y is upside down

@@ -9,38 +9,45 @@
 #ifndef __Relocalization__PTZTreeUtil__
 #define __Relocalization__PTZTreeUtil__
 
-#include <vnl/vnl_vector_fixed.h>
+//#include <vnl/vnl_vector_fixed.h>
 #include <vector>
-#include <vnl/vnl_vector.h>
+//#include <vnl/vnl_vector.h>
 #include <unordered_map>
-#include <vgl/vgl_box_2d.h>
-#include <vil/vil_image_view.h>
+//#include <vgl/vgl_box_2d.h>
+//#include <vil/vil_image_view.h>
+#include <Eigen/Dense>
+//#include <opencv2/core/core.hpp>
+//#include <opencv2/core/core_c.h>
+#include <Eigen/Geometry>
+#include <unsupported/Eigen/CXX11/Tensor>
+
 
 using std::vector;
 using std::unordered_map;
 using std::string;
+using Eigen::Vector3d;
 
 class PTZLearningSample
 {
 public:
-    vnl_vector_fixed<int, 2>    img2d_;  // 2d location (x, y)
-    vnl_vector_fixed<double, 3> ptz_;    // PTZ parameter in world coordinate, label
+    Eigen::Vector2i    img2d_;  // 2d location (x, y)
+    Eigen::Vector3d ptz_;    // PTZ parameter in world coordinate, label
     int image_index_;           // image index
-    vnl_vector_fixed<double, 3> color_;
+    Eigen::Vector3d color_;
 };
 
 class PTZTestingResult
 {
 public:
-    vnl_vector_fixed<int, 2>    img2d_;   // image position
-    vnl_vector_fixed<double, 3> gt_ptz_;  // as ground truth, not used in prediction
-    vnl_vector_fixed<double, 3> predict_ptz_;   // predicted world coordinate
+    Eigen::Vector2i    img2d_;   // image position
+    Vector3d gt_ptz_;  // as ground truth, not used in prediction
+    Vector3d predict_ptz_;   // predicted world coordinate
     
-    vnl_vector_fixed<double, 3> std_;    // prediction standard deviation
-    vnl_vector_fixed<double, 3> sampled_color_;   // image color
-    vnl_vector_fixed<double, 3> predict_color_;   // mean color from leaf node
+    Vector3d std_;    // prediction standard deviation
+    Vector3d sampled_color_;   // image color
+    Vector3d predict_color_;   // mean color from leaf node
     
-    vnl_vector_fixed<double, 3> prediction_error()
+    Vector3d prediction_error()
     {
         return predict_ptz_ - gt_ptz_;
     }   
@@ -172,68 +179,71 @@ class PTZTreeUtil
 {
 public:
     
-    static vector<PTZLearningSample> generateLearningSamples(const vnl_vector_fixed<double, 3> &ptz,
+    static vector<PTZLearningSample> generateLearningSamples(const Eigen::Vector3d &ptz,
                                                              const int img_width,
                                                              const int img_height,
                                                              const int img_index,
                                                              const int sample_num);
     //  exclusive_region: not not sample in this area
     static vector<PTZLearningSample>
-           generateLearningSamples(const vil_image_view<vxl_byte> & image,
-                                   const vnl_vector_fixed<double, 3> &ptz,
+    generateLearningSamples(const Eigen::Tensor<unsigned char, 3> & image, // h x w x 3
+                                   const Vector3d &ptz,
                                    const int img_index,
                                    const int sample_num,
-                                   const vgl_box_2d<double> & exclusive_region);
+                            const Eigen::AlignedBox<double, 2> & exclusive_region);
     
     static void mean_std(const vector<PTZLearningSample> & samples,
                          const vector<unsigned int> & indices,
-                         vnl_vector_fixed<double, 3> & mean,
-                         vnl_vector_fixed<double, 3> & stddev);
-    
+                         Eigen::Vector3d & mean,
+                         Eigen::Vector3d & stddev);
+    /*
     static void mean_std(const vector<vnl_vector_fixed<double, 3> > & data,
                          vnl_vector_fixed<double, 3> & mean,
                          vnl_vector_fixed<double, 3> & stddev);
+     */
     
     static double variance(const vector<PTZLearningSample> & samples,
                            const vector<unsigned int> & indices,
-                           const vnl_vector_fixed<double, 3> & wt);
+                           const Eigen::Vector3d & wt);
     
+    /*
     // median value of absolute error
     static void median_error(const vector< vnl_vector_fixed<double, 3> > & error,
                              vnl_vector_fixed<double, 3> & median);
+     */
     
     //sequence_file_name            = "/Users/jimmy/Desktop/images/Youtube/PTZRegressor/seq1/seq1.txt"
     //image_sequence_base_directory = "/Users/jimmy/Desktop/images/Youtube/PTZRegressor/seq1/"
     static void read_sequence_data(const char * sequence_file_name,
                                    const char * image_sequence_base_directory,
                                    vector<string> & image_files,
-                                   vector<vnl_vector_fixed<double, 3> > & ptzs);
+                                   vector<Vector3d > & ptzs);
     
     // load predicted results
     static bool load_prediction_result_with_color(const char *file_name,
                                            string & rgb_img_file,
-                                           vnl_vector_fixed<double, 3> & ptz,
-                                           vector<vnl_vector_fixed<int, 2> > & img_pts,
-                                           vector<vnl_vector_fixed<double, 3> > & pred_ptz,
-                                           vector<vnl_vector_fixed<double, 3> > & gt_ptz,
-                                           vector<vnl_vector_fixed<double, 3> > & color_pred,
-                                           vector<vnl_vector_fixed<double, 3> > & color_sample);
+                                           Vector3d & ptz,
+                                                  vector<Eigen::Vector2i > & img_pts,
+                                           vector<Vector3d > & pred_ptz,
+                                           vector<Vector3d > & gt_ptz,
+                                           vector<Vector3d > & color_pred,
+                                           vector<Vector3d > & color_sample);
     
     // two points can be from different image
-    static void panTiltFromReferencePointDecodeFocalLength(const vgl_point_2d<double> & reference_point,
-                                                              const vnl_vector_fixed<double, 3> & reference_ptz,
-                                                              const vgl_point_2d<double> & principle_point,
-                                                           vnl_vector_fixed<double, 3> & ptz);
+    static void panTiltFromReferencePointDecodeFocalLength(const Eigen::Vector2d & reference_point,
+                                                           const Eigen::Vector3d & reference_ptz,
+                                                           const Eigen::Vector2d & principle_point,
+                                                           Eigen::Vector3d & ptz);
     
     // two points can be from different image
     // pp: pinciple point
     // pp_ptz: pan, tilt and zoom of the pinciple point
     // p2: a query point
     // p2_ptz: pan, tilt and zoom of the query point    
-    static void panYtiltXFromPrinciplePointEncodeFocalLength(const vgl_point_2d<double> & pp,
-                                                                   const vnl_vector_fixed<double, 3> & pp_ptz,
-                                                                   const vgl_point_2d<double> & p2,
-                                                             vnl_vector_fixed<double, 3> & p2_ptz);
+    static void panYtiltXFromPrinciplePointEncodeFocalLength(const Eigen::Vector2d & pp,
+                                                             const Eigen::Vector3d & pp_ptz,
+                                                             const Eigen::Vector2d & p2,
+                                                             Eigen::Vector3d & p2_ptz);
 
 
     
@@ -245,10 +255,10 @@ public:
         return x >= 0 && x < width && y >= 0 && y < height;
     }
     
-    static vgl_box_2d<double> highschool_RS_invalid_region()
+    static Eigen::AlignedBox<double, 2> highschool_RS_invalid_region()
     {
-        vgl_box_2d<double> box(172.0, 172.0 + 936.0, 620.0,  620.0 + 66.0);
-        return box;
+        //vgl_box_2d<double> box(172.0, 172.0 + 936.0, 620.0,  620.0 + 66.0);
+        return Eigen::AlignedBox<double, 2>::AlignedBox(Eigen::Vector2d(172.0, 620.0), Eigen::Vector2d(172.0 + 936.0, 620.0 + 66.0));
     }
 };
 

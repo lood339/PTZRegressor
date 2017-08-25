@@ -13,7 +13,7 @@
 #include "PTZRegressorBuilder.h"
 #include "PTZTreeUtil.h"
 
-#if 1
+#if 0
 
 
 static void help()

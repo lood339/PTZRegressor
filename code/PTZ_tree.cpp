@@ -9,15 +9,15 @@
 #include "PTZ_tree.h"
 #include <algorithm>
 #include <limits>
-#include <vnl/vnl_random.h>
 #include <iostream>
+#include "dt_util.hpp"
 
 using std::cout;
 using std::endl;
 
 bool PTZTree::buildTree(const vector<PTZLearningSample> & samples,
                         const vector<unsigned int> & indices,
-                        const vector<vil_image_view<unsigned char> > & rgbImages,
+                        const vector<Eigen::Tensor<unsigned char, 3 >> & rgbImages,
                         const PTZTreeParameter & param)
 {
     assert(indices.size() <= samples.size());
@@ -27,22 +27,8 @@ bool PTZTree::buildTree(const vector<PTZLearningSample> & samples,
     return true;
 }
 
-
-static vector<double> getRandomCadidate(const double min_val, const double max_val, int num)
-{
-    assert(min_val <= max_val);
-    assert(num > 0);
-    
-    vector<double> data;
-    vnl_random rnd;
-    for (int i = 0; i<num; i++) {
-        data.push_back(rnd.drand32(min_val, max_val));
-    }
-    return data;
-}
-
-static double bestSplitCandidate(const vector<PTZLearningSample> & samples,
-                                 const vector<vil_image_view<unsigned char> > & rgb_images,
+double PTZTree::bestSplitCandidate(const vector<PTZLearningSample> & samples,
+                                 const vector<Eigen::Tensor<unsigned char, 3 > > & rgb_images,
                                  const vector<unsigned int> & indices,
                                  const PTZSplitParameter & split_param,
                                  const int split_num,
@@ -55,16 +41,17 @@ static double bestSplitCandidate(const vector<PTZLearningSample> & samples,
     vector<double> features;
     const int c1 = split_param.channle_[0];
     const int c2 = split_param.channle_[1];
-    const vnl_vector_fixed<int, 2> offset = split_param.offset2_;
-    const vnl_vector_fixed<double, 2> wt  = split_param.wt_;
+    const Eigen::Vector2i offset = split_param.offset2_;
+    const Eigen::Vector2d wt  = split_param.wt_;
     for (int i = 0; i<indices.size(); i++) {
         const int index = indices[i];
         const int img_idx = samples[index].image_index_;
-        const int width  = rgb_images[img_idx].ni();
-        const int height = rgb_images[img_idx].nj();
+        const int height = (int)rgb_images[img_idx].dimension(0);
+        const int width  = (int)rgb_images[img_idx].dimension(1);
         
-        vnl_vector_fixed<int, 2> p1 = samples[index].img2d_;
-        vnl_vector_fixed<int, 2> p2 = p1 + offset;
+        
+        Eigen::Vector2i p1 = samples[index].img2d_;
+        Eigen::Vector2i p2 = p1 + offset;
         
         int val1 = rgb_images[img_idx](p1[0], p1[1], c1);
         int val2 = 0;
@@ -86,9 +73,9 @@ static double bestSplitCandidate(const vector<PTZLearningSample> & samples,
     double val_min = *std::min_element(features.begin(), features.end());
     double val_max = *std::max_element(features.begin(), features.end());
     
-    vector<double> split_candidate = getRandomCadidate(val_min, val_max, split_num);
+    vector<double> split_candidate = rnd_generator_.getRandomNumbers(val_min, val_max, split_num);
     
-    const vnl_vector_fixed<double, 3> ptz_wt(1.0, 1.0, 0.001);
+    const Eigen::Vector3d ptz_wt(1.0, 1.0, 0.001);
     double loss = std::numeric_limits<double>::max();
     for (int i = 0; i<split_candidate.size(); i++) {
         double cur_split = split_candidate[i];
@@ -127,7 +114,7 @@ static double bestSplitCandidate(const vector<PTZLearningSample> & samples,
                           
 
 bool PTZTree::configureNode(const vector<PTZLearningSample> & samples,
-                            const vector<vil_image_view<unsigned char> > & rgb_images,
+                            const vector<Eigen::Tensor<unsigned char, 3 > > & rgb_images,
                             const vector<unsigned int> & indices,
                             int depth,
                             PTZTreeNode *node)
@@ -140,12 +127,12 @@ bool PTZTree::configureNode(const vector<PTZLearningSample> & samples,
         node->is_leaf_ = true;
         node->sample_num_ = (int)indices.size();
         PTZTreeUtil::mean_std(samples, indices, node->ptz_, node->stddev_);
-        vector<vnl_vector_fixed<double, 3>> sample_colors;
+        vector<Eigen::Vector3d> sample_colors;
         for (int i = 0; i<indices.size(); i++) {
             sample_colors.push_back(samples[indices[i]].color_);
         }
         
-        PTZTreeUtil::mean_std(sample_colors, node->color_mu_, node->color_sigma_);
+        dt::meanStd(sample_colors, node->color_mu_, node->color_sigma_);
         if (param_.verbose_) {
             //cout<<"pan tilt zoom is "<<node->ptz_<<endl;
             printf("depth, num_leaf_node, %d, %lu\n", depth, indices.size());
@@ -161,16 +148,6 @@ bool PTZTree::configureNode(const vector<PTZLearningSample> & samples,
     int pixel_offset_candidate_num = param_.pixel_offset_candidate_num_;  // large number less randomness
     int split_candidate_num  = param_.split_candidate_num_;  // number of split in [v_min, v_max]
     int weight_candidate_num = param_.weight_candidate_num_;
-    
-    vector<vnl_vector_fixed<double, 2> > random_weights;
-    random_weights.push_back(vnl_vector_fixed<double, 2>(1.0, -1.0));
-    vnl_random rnd;
-    for (int i = 0; i<weight_candidate_num; i++) {
-        double w1 = rnd.drand32(-1.0, 1.0);
-        double w2 = rnd.drand32(-1.0, 1.0);
-        random_weights.push_back(vnl_vector_fixed<double, 2>(w1, w2));
-    }
-    // @todo not used in the program
     
     vector<PTZSplitParameter> candidate_splits;
     for (int i = 0; i<pixel_offset_candidate_num; i++) {
@@ -233,11 +210,11 @@ bool PTZTree::configureNode(const vector<PTZLearningSample> & samples,
             // statistics of pan, tilt and zoom
             PTZTreeUtil::mean_std(samples, indices, node->ptz_, node->stddev_);
             // statistics of sampled colors
-            vector<vnl_vector_fixed<double, 3>> sample_colors;
+            vector<Eigen::Vector3d> sample_colors;
             for (int i = 0; i<indices.size(); i++) {
                 sample_colors.push_back(samples[indices[i]].color_);
             }
-            PTZTreeUtil::mean_std(sample_colors, node->color_mu_, node->color_sigma_);
+            dt::meanStd(sample_colors, node->color_mu_, node->color_sigma_);
         }
         
         if (left_indices.size() > 0) {
@@ -262,12 +239,12 @@ bool PTZTree::configureNode(const vector<PTZLearningSample> & samples,
         node->is_leaf_ = true;
         node->sample_num_ = (int)indices.size();
         PTZTreeUtil::mean_std(samples, indices, node->ptz_, node->stddev_);
-        vector<vnl_vector_fixed<double, 3>> sample_colors;
+        vector<Eigen::Vector3d> sample_colors;
         for (int i = 0; i<indices.size(); i++) {
             sample_colors.push_back(samples[indices[i]].color_);
         }
         
-        PTZTreeUtil::mean_std(sample_colors, node->color_mu_, node->color_sigma_);
+        dt::meanStd(sample_colors, node->color_mu_, node->color_sigma_);
         if (param_.verbose_) {
             //cout<<"pan tilt zoom is "<<node->ptz_<<endl;
             printf("depth, num_leaf_node, %d, %lu\n", depth, indices.size());
@@ -284,7 +261,7 @@ bool PTZTree::configureNode(const vector<PTZLearningSample> & samples,
 
 
 bool PTZTree::predict(
-                      const vil_image_view<unsigned char> & rgb_image,
+                      const Eigen::Tensor<unsigned char, 3 > & rgb_image,
                       PTZTestingResult & predict) const
 {
     assert(root_);
@@ -292,11 +269,13 @@ bool PTZTree::predict(
 }
 
 bool PTZTree::predict(PTZTreeNode *node,
-                      const vil_image_view<unsigned char> & rgb_image,
+                      const Eigen::Tensor<unsigned char, 3 > & rgb_image,
                       PTZTestingResult & predict) const
 {
     assert(node);
     
+    const int height = (int)rgb_image.dimension(0);
+    const int width = (int)rgb_image.dimension(1);
     if (node->is_leaf_) {        
         predict.predict_ptz_ = node->ptz_;
         predict.predict_color_ = node->color_mu_;
@@ -305,11 +284,11 @@ bool PTZTree::predict(PTZTreeNode *node,
     
     PTZSplitParameter & split_param = node->split_param_;
     
-    vnl_vector_fixed<int, 2> p1 = predict.img2d_;
-    vnl_vector_fixed<int, 2> p2 = predict.img2d_ + split_param.offset2_;
+    Eigen::Vector2i p1 = predict.img2d_;
+    Eigen::Vector2i p2 = predict.img2d_ + split_param.offset2_;
     int v1 = rgb_image(p1[0], p1[1], split_param.channle_[0]);
     int v2 = 0;
-    if (rgb_image.in_range(p2[0], p2[1])) {
+    if (PTZTreeUtil::is_inside_image(p2[0], p2[1], width, height)) {
         v2 = rgb_image(p2[0], p2[1], split_param.channle_[1]);
     }
     double feat = v1 * split_param.wt_[0] + v2 * split_param.wt_[1];
@@ -397,18 +376,18 @@ static void read_PTZ_prediction(FILE *pf, PTZTreeNode * & node)
     
     node->depth_ = depth;
     node->is_leaf_ = (isLeaf == 1);
-    node->ptz_ = vnl_vector_fixed<double, 3>(ptz[0], ptz[1], ptz[2]);
-    node->stddev_ = vnl_vector_fixed<double, 3>(sigma_ptz[0], sigma_ptz[1], sigma_ptz[2]);
-    node->color_mu_ = vnl_vector_fixed<double, 3>(color);
-    node->color_sigma_ = vnl_vector_fixed<double, 3>(color_sigma);
+    node->ptz_ = Eigen::Vector3d(ptz[0], ptz[1], ptz[2]);
+    node->stddev_ = Eigen::Vector3d(sigma_ptz[0], sigma_ptz[1], sigma_ptz[2]);
+    node->color_mu_ = Eigen::Vector3d(color);
+    node->color_sigma_ = Eigen::Vector3d(color_sigma);
     node->sample_num_ = sample_num;
     node->sample_percentage_ = sample_percentage;
     
     // split parameter
     PTZSplitParameter param;
-    param.offset2_ = vnl_vector_fixed<int, 2>(d2[0], d2[1]);
-    param.channle_ = vnl_vector_fixed<int, 2>(c1, c2);
-    param.wt_ = vnl_vector_fixed<double, 2>(wt);
+    param.offset2_ = Eigen::Vector2i(d2[0], d2[1]);
+    param.channle_ = Eigen::Vector2i(c1, c2);
+    param.wt_ = Eigen::Vector2d(wt);
     param.threshold_ = threhold;
     
     node->split_param_ = param;

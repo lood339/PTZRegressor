@@ -6,6 +6,7 @@
 //  Copyright (c) 2016 Nowhere Planet. All rights reserved.
 //
 
+#if 0
 #include <iostream>
 #include <string>
 #include <vector>
@@ -20,7 +21,7 @@
 using std::cout;
 using std::endl;
 
-#if 0
+
 
 static void help()
 {
