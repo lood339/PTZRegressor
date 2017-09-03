@@ -6,7 +6,7 @@
 //  Copyright (c) 2016 Nowhere Planet. All rights reserved.
 //
 
-#if 1
+#if 0
 #include <iostream>
 #include <string>
 #include <vector>
@@ -32,9 +32,11 @@ using Eigen::Vector3d;
 
 static void help()
 {
-    printf("program  RFModelFile sequenceParam reprojThreshold distanceThreshold numSample saveFile \n");
-    printf("PTZ_test rf.txt      seq_param.txt 2               25               5000      result.mat   \n");
+    printf("program  RFModelFile sequenceParam reprojThreshold distanceThreshold numSample ransacNum saveFile \n");
+    printf("PTZ_test rf.txt      seq_param.txt 2               25                5000      500       result.mat   \n");
+    printf("PTZ camera pose estimation using random RGB features\n");
     printf("parameter fits to US high school basketball dataset\n");
+    printf("distanceThreshold: RGB color distance \n");
 }
 
 static void read_testing_sequence_files(const char *file_name,
@@ -70,8 +72,8 @@ static void read_testing_sequence_files(const char *file_name,
 
 int main(int argc, const char * argv[])
 {
-    if (argc != 7) {
-        printf("argc is %d, should be 7 \n", argc);
+    if (argc != 8) {
+        printf("argc is %d, should be 8 \n", argc);
         help();
         return -1;
     }
@@ -80,7 +82,8 @@ int main(int argc, const char * argv[])
     const double reprojection_error_threshold = strtod(argv[3], NULL);
     const double distance_threshold = strtod(argv[4], NULL);
     const int sample_number = (int)strtod(argv[5], NULL);
-    const char * save_file = argv[6];
+    const int ransac_num = (int)strtod(argv[6], NULL);
+    const char * save_file = argv[7];
     
     /*
     const char * model_file = "/Users/jimmy/Desktop/bmvc16_ptz_calib/model/seq1.txt";
@@ -115,7 +118,7 @@ int main(int argc, const char * argv[])
     Eigen::Vector2d pp(1280.0/2.0, 720.0/2.0);
     ptz_pose_opt::PTZPreemptiveRANSACParameter param;
     param.reprojection_error_threshold_ = reprojection_error_threshold;
-    param.sample_number_ = 64;
+    param.sample_number_ = ransac_num;
     
     Eigen::MatrixXd gt_ptz_all(image_files.size(), 3);
     Eigen::MatrixXd estimated_ptz_all(image_files.size(), 3);
@@ -164,13 +167,14 @@ int main(int argc, const char * argv[])
         }
         assert(image_points.size() == candidate_pan_tilt.size());
         printf("valid sample number is %lu\n", image_points.size());
+        printf("Prediction and camera pose estimation cost time: %f seconds.\n", (clock() - tt)/CLOCKS_PER_SEC);
         
         Eigen::Vector3d estimated_ptz(0, 0, 0);
         bool is_opt = ptz_pose_opt::preemptiveRANSACOneToMany(image_points,
                                                               candidate_pan_tilt,
                                                               pp,
                                                               param, estimated_ptz, false);
-        //printf("Prediction and camera pose estimation cost time: %f seconds.\n", (clock() - tt)/CLOCKS_PER_SEC);
+        
         if (is_opt) {
             cout<<"ptz estimation error: "<<(gt_ptz - estimated_ptz).transpose()<<endl;
         }
